@@ -1,0 +1,36 @@
+/* Cakey tweaks layered over chessground's brown board + cburnett pieces.
+ * chessground.brown.css / .cburnett.css are self-contained (embedded SVGs), so
+ * these just round the board and warm the highlight/selection colors to match
+ * Chess Island's cakey theme. */
+
+.cg-wrap {
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(120, 53, 15, 0.25);
+}
+
+/* Warm amber last-move + selection (was chessground green/olive). */
+cg-board square.last-move {
+  background-color: rgba(251, 191, 36, 0.45);
+}
+cg-board square.selected {
+  background-color: rgba(217, 164, 65, 0.55);
+}
+/* Rose move-dest dots to match the game's accent. */
+cg-board square.move-dest {
+  background: radial-gradient(rgba(190, 24, 93, 0.35) 22%, rgba(190, 24, 93, 0.35) 0, rgba(0, 0, 0, 0) 28%);
+}
+cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, rgba(190, 24, 93, 0.4) 78%);
+}
+
+/* Algebraic coordinates (a–h / 1–8) — enabled per ticket. Deep-rose glyphs
+ * with a soft cream halo so they read clearly on both light and dark squares. */
+.cg-wrap coords {
+  font-weight: 700;
+  font-size: 11px;
+}
+.cg-wrap coords coord {
+  color: #9d174d;
+  text-shadow: 0 0 2px rgba(255, 251, 235, 0.95), 0 0 1px rgba(255, 251, 235, 0.95);
+}

@@ -1,0 +1,47 @@
+{
+  "name": "gamecakes",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "npm run needle:sync-runtime",
+    "dev": "next dev",
+    "prebuild": "npm run needle:sync-runtime && npm run needle:validate",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "check:names": "node scripts/ci/check-founder-names.mjs",
+    "needle:generate-spike": "node scripts/needle/generate-spike-dome.mjs",
+    "needle:sync-runtime": "node scripts/needle/sync-runtime.mjs",
+    "needle:validate": "node scripts/needle/validate-assets.mjs",
+    "needle:gate:production": "node scripts/needle/production-gate.mjs"
+  },
+  "dependencies": {
+    "@needle-tools/engine": "6.0.0-alpha.2",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
+    "@tweenjs/tween.js": "^25.0.0",
+    "cannon-es": "^0.20.0",
+    "chess.js": "^1.4.0",
+    "chessground": "^9.2.1",
+    "maath": "^0.10.8",
+    "next": "16.2.3",
+    "phaser": "^3.90.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "roughjs": "^4.6.6",
+    "three": "npm:@needle-tools/three@0.185.2-alpha.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "0.185.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.6"
+  }
+}

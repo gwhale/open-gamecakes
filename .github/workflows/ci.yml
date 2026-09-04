@@ -1,0 +1,80 @@
+name: CI
+
+# Runs on every pull request, including from forks.
+#
+# Deliberately needs NO SECRETS. The build below uses placeholder Supabase
+# credentials, which is enough because nothing is fetched at build time -- and
+# that is the point: an outside contributor's PR gets the full set of checks
+# without anyone handing them access to a real project. It also proves, on
+# every commit, the claim the open-source plan rests on: that a stranger can
+# clone this and build it.
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+# A newer push to the same PR cancels the older run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Git LFS holds authored art sources under art/. They are NOT needed
+          # to build -- runtime assets in public/ are deliberately not in LFS,
+          # because Vercel does not fetch LFS objects and an LFS-tracked file
+          # under public/ deploys as a ~130-byte pointer. Skipping the fetch
+          # keeps CI fast and mirrors what the deploy actually sees.
+          lfs: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` respects the committed .npmrc, which sets legacy-peer-deps
+      # because `three` is aliased to a PRERELEASE fork
+      # (npm:@needle-tools/three). Without it a COLD install dies with
+      # ERESOLVE on maath's `three@">=0.134.0"` peer range, which does not
+      # match a prerelease. This reproduces only on a clean install, so CI is
+      # exactly where it bites.
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: No founder names in public-facing prose
+        run: npm run check:names
+
+      # The placeholder-env build. Values are syntactically valid and point at
+      # nothing; if a future change starts requiring a live database at build
+      # time, this step is what will catch it.
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+          SUPABASE_SECRET_KEY: sb_secret_placeholder
+          NEXT_PUBLIC_ENABLE_NEEDLE_TOWN: '0'
+          SITE_PASSWORD: placeholder
+          SITE_COOKIE_SECRET: '0000000000000000000000000000000000000000000000000000000000000000'
+          PARENT_ADMIN_PASSWORD: placeholder
+          PARENT_ADMIN_COOKIE_SECRET: '1111111111111111111111111111111111111111111111111111111111111111'
+          PARENT_PASSWORD: placeholder
+          PARENT_COOKIE_SECRET: '0000000000000000000000000000000000000000000000000000000000000000'
+        run: npm run build
