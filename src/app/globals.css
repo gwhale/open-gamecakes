@@ -1,0 +1,416 @@
+@import "tailwindcss";
+
+/* Keep Tailwind's source scanner out of the authored-art tree.
+ *
+ * `art/**` holds Blender sources, which are LFS-tracked. Tailwind v4 crawls
+ * every non-ignored file looking for class candidates, and .blend is not on its
+ * binary skip-list — so it reads a megabyte of binary as text, hits a byte run
+ * that parses as a CSS escape, and dies before any build output:
+ *
+ *   CssSyntaxError: tailwindcss: globals.css:1:1: Invalid code point 16018480
+ *
+ * 16018480 is 0xf46c30, well past the 0x10FFFF ceiling — random bytes, not a
+ * real escape. The reason CI never caught it: Vercel does not fetch Git LFS, so
+ * there these are ~130-byte ASCII pointer stubs that scan harmlessly. Only
+ * developers WITH the LFS content materialised get a hard-broken `next build`
+ * AND `next dev`, which made it look like a local-sandbox problem.
+ *
+ * Nothing under art/ ever contains a utility class, so scanning it is pure
+ * waste even when it doesn't crash. */
+@source not "../../art";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* Apple HIG minimum tap target — use on every tappable element on iPad. */
+  --min-tap-target: 44px;
+
+  /* ---- Gamecakes brand palette ---------------------------------------
+   * The three cake layers are the primary brand colors. Use these CSS
+   * vars (instead of hardcoded Tailwind classes) anywhere the brand
+   * identity should be felt — hero buttons, selected states, accents,
+   * celebration flourishes.
+   *
+   * The cherry and stem are secondary; they're used in the logo and
+   * rarely elsewhere. Highlight/tint variants are provided for use in
+   * hover states and backgrounds.
+   * -------------------------------------------------------------------- */
+  --brand-strawberry:      #fb7185; /* bottom layer — rose-400 */
+  --brand-strawberry-tint: #fda4af; /* rose-300, lighter */
+  --brand-strawberry-deep: #e11d48; /* rose-600, for press states */
+
+  --brand-vanilla:         #fde68a; /* middle layer — amber-200 */
+  --brand-vanilla-tint:    #fef3c7; /* amber-100 */
+
+  --brand-mint:            #6ee7b7; /* top layer — emerald-300 */
+  --brand-mint-tint:       #a7f3d0; /* emerald-200 */
+  --brand-mint-deep:       #10b981; /* emerald-500 */
+
+  --brand-cherry:          #dc2626; /* cherry — red-600 */
+  --brand-stem:            #166534; /* cherry stem — green-800 */
+
+  /* ---- Semantic action roles -----------------------------------------
+   * The brand vars above are IDENTITY (what Gamecakes is made of). These
+   * are MEANING (what a control does). Every interactive surface picks a
+   * role, never a raw hue — see DESIGN.md's Layer Rule.
+   *
+   *   act    — do the thing. Play, confirm, launch.        (rose)
+   *   earn   — currency and reward. Tokens, prices.        (amber)
+   *   grow   — unlock, upgrade, succeed.                   (emerald)
+   *   travel — go somewhere. Ferry, train, garage, lands.  (sky)
+   *   exit   — stop, hop off, close, go back.              (chrome, NOT candy)
+   *
+   * `exit` is deliberately outside the candy palette. Stopping isn't an
+   * achievement, so it must not look like one — that ambiguity is exactly
+   * what made "Play" and "Hop off" both rose before this.
+   *
+   * INK IS NOT A CHOICE. Each role's `-ink` is fixed by the luminance of
+   * its fill: fills dark enough to carry white text get white, the bright
+   * candy fills get a deep ink of their own hue. Every pair below is
+   * verified >= 4.70:1 at BOTH gradient stops (AA for 16px bold, which is
+   * the smallest these ever render). Worst pair in the system is `act` at
+   * 4.70. Never hand-pick a label colour; use the role's ink.
+   * -------------------------------------------------------------------- */
+  /* `-glow` carries its own alpha so the shell can drop it straight into a
+   * box-shadow. No color-mix(): that lands in iOS 16.2 and these iPads may
+   * be older. */
+  --act-from:    #e11d48; /* rose-600  */
+  --act-to:      #be123c; /* rose-700  */
+  --act-ink:     #ffffff; /* 4.70 / 6.29 */
+  --act-glow:    rgb(253 164 175 / 0.55); /* rose-300  */
+
+  --earn-from:   #fbbf24; /* amber-400 */
+  --earn-to:     #f59e0b; /* amber-500 */
+  --earn-ink:    #451a03; /* amber-950 — 8.97 / 6.97 */
+  --earn-glow:   rgb(252 211 77 / 0.55); /* amber-300 */
+
+  --grow-from:   #34d399; /* emerald-400 */
+  --grow-to:     #10b981; /* emerald-500 */
+  --grow-ink:    #022c22; /* emerald-950 — 7.88 / 5.97 */
+  --grow-glow:   rgb(110 231 183 / 0.55); /* emerald-300 */
+
+  --travel-from: #38bdf8; /* sky-400 */
+  --travel-to:   #0ea5e9; /* sky-500 */
+  --travel-ink:  #082f49; /* sky-950 — 6.48 / 5.01 */
+  --travel-glow: rgb(125 211 252 / 0.55); /* sky-300 */
+
+  --exit-from:   #27272a; /* zinc-800 */
+  --exit-to:     #18181b; /* zinc-900 */
+  --exit-ink:    #ffffff; /* 15.3 / 17.72 */
+  --exit-glow:   rgb(0 0 0 / 0.25);
+
+  /* Chrome — floating nav over a live canvas. Same ink as `exit`; kept
+   * separate because chrome is translucent + blurred and exit is solid. */
+  --chrome-fill: #18181b;
+  --chrome-ink:  #ffffff;
+
+  /* ---- Focus indicator ------------------------------------------------
+   * A two-tone ring, because no single colour can clear 3:1 against both a
+   * bright candy fill AND whatever the 3D town happens to be rendering
+   * behind it. The inner/outer pair contrasts 17.72:1 with ITSELF, so the
+   * indicator stays perceivable on any background — white page, dark page,
+   * sky, grass, sand. Candy controls use inner-dark/outer-light; dark
+   * controls (chrome, exit) swap them, since a dark ring on a dark pill is
+   * invisible.
+   * -------------------------------------------------------------------- */
+  --focus-dark:  #18181b;
+  --focus-light: #ffffff;
+}
+
+/* ---- The candy shell -------------------------------------------------------
+ * The visual body of every role-based control. Lives in CSS rather than a
+ * Tailwind class string for two reasons: the shadow stack is layered enough
+ * that utilities would be unreadable, and `:focus-visible` has to rewrite the
+ * whole box-shadow (you cannot add to one from an inline style).
+ *
+ * A component sets --c-from / --c-to / --c-ink / --c-glow from a role and
+ * everything below follows. The shadow layers, in paint order:
+ *   1. rim light      — the thin wet specular line along the top edge. This is
+ *                       the gloss. The previous 40%-tall white wash sat behind
+ *                       the label and cost ~2 stops of contrast; a rim reads as
+ *                       candy without touching the text.
+ *   2. bottom occlusion — grounds the shape so it reads solid, not printed.
+ *   3. hairline        — containment on any background.
+ *   4. drop glow       — tinted to the control's own hue (the Own-Hue Rule).
+ * -------------------------------------------------------------------------- */
+.candy-shell {
+  background: linear-gradient(to bottom right, var(--c-from), var(--c-to));
+  color: var(--c-ink);
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 10px 15px -3px var(--c-glow);
+}
+
+/* Press drops the object: the glow collapses toward the surface. Paired with
+ * `active:scale-95` on the element. Required — the global
+ * -webkit-tap-highlight-color:transparent means colour alone is not feedback. */
+.candy-shell:active {
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 3px 6px -2px var(--c-glow);
+}
+
+/* Two-tone focus ring. No single colour clears 3:1 against both a bright candy
+ * fill and an arbitrary 3D scene, so the ring contrasts with ITSELF (17.72:1)
+ * and stays perceivable on any backdrop. Dark sits inside against the fill;
+ * light sits outside against the page. */
+.candy-shell:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 0 0 2px var(--focus-dark),
+    0 0 0 5px var(--focus-light);
+}
+
+/* Inert (disabled). NOT `opacity: 0.5` — that fades the fill and the label
+ * together and drops every role to ~2.0-2.4:1. That would be WCAG-legal
+ * (disabled controls are exempt) and still wrong here, because in Gamecakes the
+ * disabled state is where the REASON lives: the ferry button reads "Need 1 —
+ * play games!" exactly when it's disabled. A kid has to be able to read the one
+ * message that tells them what to do next.
+ *
+ * So an inert control goes flat and neutral, keeps a full-strength label, and
+ * drops the lift entirely — it isn't candy any more, and it isn't pressable. */
+.candy-shell:disabled,
+.candy-shell[aria-disabled='true'] {
+  background: #e4e4e7;
+  color: #3f3f46; /* 8.23:1 */
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  cursor: not-allowed;
+}
+@media (prefers-color-scheme: dark) {
+  .candy-shell:disabled,
+  .candy-shell[aria-disabled='true'] {
+    background: #3f3f46;
+    color: #d4d4d8; /* 7.07:1 */
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  }
+}
+
+/* Chrome carries the same two-tone ring, but which tone sits against the pill
+ * depends on the pill. The inner band must contrast with the FILL, so a dark
+ * pill needs a light inner and a light pill needs a dark one — on the light
+ * variant the inherited light-inner was 1.02:1 against its own fill, wasting
+ * 2 of the ring's 5px. The component sets the pair; the default here is the
+ * dark pill because that is the common case (game canvases, the 3D town). */
+.chrome-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--ring-inner, var(--focus-light)),
+    0 0 0 5px var(--ring-outer, var(--focus-dark));
+}
+
+/* Inert chrome. Same reasoning as `.candy-shell:disabled`: fade the pill, keep
+ * the label. A chrome pill rarely carries a message, but a system that states a
+ * rule and then breaks it in one component is how drift starts. */
+.chrome-inert:disabled,
+.chrome-inert[aria-disabled='true'] {
+  background: #e4e4e7;
+  border-color: rgb(0 0 0 / 0.08);
+  color: #3f3f46; /* 8.23:1 */
+  box-shadow: none;
+  backdrop-filter: none;
+  cursor: not-allowed;
+}
+@media (prefers-color-scheme: dark) {
+  .chrome-inert:disabled,
+  .chrome-inert[aria-disabled='true'] {
+    background: #3f3f46;
+    border-color: rgb(255 255 255 / 0.08);
+    color: #d4d4d8; /* 7.07:1 */
+  }
+}
+
+/* Motion: the press and the ring are feedback, so they stay — they just stop
+ * animating. Anything that only moves for flavour is already handled at its
+ * own callsite. */
+@media (prefers-reduced-motion: reduce) {
+  .candy-shell,
+  .chrome-focus {
+    transition-duration: 1ms;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  /* Display font — Fredoka, rounded + chunky. Used by Tailwind's
+   * `font-display` utility on headings, game titles, and any UI text
+   * that should feel kid-friendly. Body type stays --font-sans. */
+  --font-display: var(--font-fredoka);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Prefer the Geist sans font provided by layout.tsx; fall back cleanly. */
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Display font for headings — Fredoka, rounded + chunky, far more
+ * kid-friendly than the body sans. Applied at the element selector
+ * so every h1-h3 across the site gets the upgrade without component
+ * edits; opt out per-element with `font-sans` if needed (rare). */
+h1, h2, h3 {
+  font-family: var(--font-display), var(--font-sans),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Safe-area-aware fixed overlays --------------------------------------
+ * In standalone PWA mode the iPad home indicator overlaps the bottom edge.
+ * Fixed bottom prompts (the town's Play / ferry / train buttons, hint toasts)
+ * use these instead of Tailwind's bottom-6 / bottom-24 so they clear it.
+ * `env()` resolves to 0 inside Safari tabs, so this is a no-op there.
+ * (The old approach padded every h1-h3 with the insets — the wrong target:
+ * headings aren't pinned to screen edges, fixed overlays are.)
+ * -------------------------------------------------------------------------- */
+.fixed-bottom-safe {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+.fixed-bottom-safe-hi {
+  bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---- Standalone PWA chrome ------------------------------------------------
+ * When a kid opens Gamecakes from the home-screen icon, iOS launches
+ * the app with `display-mode: standalone` — no Safari URL bar, no
+ * tab strip. The body extends edge to edge. Use a brand-tinted bg
+ * here (instead of the default white) so the strip behind the
+ * notch / home indicator doesn't look like blank web chrome.
+ * -------------------------------------------------------------------------- */
+@media (display-mode: standalone) {
+  body {
+    background: linear-gradient(135deg, #fecdd3 0%, #fde68a 60%, #bbf7d0 100%);
+  }
+}
+
+/* ---- View transitions ------------------------------------------------------
+ * Next.js App Router supports the View Transitions API for cross-document
+ * animations. Default Safari/Chromium behavior is a 200ms cross-fade
+ * between routes, which already eliminates the harsh white flash that
+ * plagues SPAs. Customize the timing here so it feels snappier (140ms,
+ * eased) and matches the brand pace.
+ * -------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 140ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* ---- iOS / tablet "app-like" polish --------------------------------------
+ * Without these rules, kid taps on iPad feel noticeably worse than the
+ * Phaser canvas: a gray highlight flashes on every button, long-press
+ * triggers the copy/selection callout, dragging a finger selects text and
+ * fires the iOS magnifier, and any swipe on the canvas rubber-bands the
+ * whole page. The result is that the boundary between the game canvas
+ * and the React chrome feels "webby." These rules close that gap.
+ *
+ * Scoped globally because every gated page benefits — not just games.
+ * -------------------------------------------------------------------------- */
+html,
+body {
+  /* Kills the gray/black tap-highlight flash on iOS Safari. */
+  -webkit-tap-highlight-color: transparent;
+  /* Disables the long-press copy/save callout menu — kids who hold down
+   * a button long enough to "re-tap" don't get a system menu instead. */
+  -webkit-touch-callout: none;
+  /* Prevents the canvas swipe from rubber-banding the whole page. */
+  overscroll-behavior: none;
+  /* `manipulation` removes the ~300 ms tap-delay iOS adds for double-tap
+   * zoom, without blocking vertical scroll on pages that need it (map,
+   * tickets, parent dashboard). */
+  touch-action: manipulation;
+}
+
+/* UI chrome shouldn't be selectable. Kids drag-tapping rapidly will
+ * otherwise highlight headings / button text and trigger the iOS
+ * magnifier, which reads as "the app glitched." Content elements
+ * (<p>, <span>, <div>, transcripts, ship-notes) stay selectable so
+ * parents can still quote a kid's feedback. */
+button,
+a[href],
+nav,
+header,
+footer,
+label,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Opt-in escape hatch: add `.select-text` to any element that should
+ * remain selectable even if one of the rules above would block it
+ * (e.g. a heading that contains a copyable code snippet). */
+.select-text,
+.select-text * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---- Map cloud animations ----------------------------------------
+ * Three clouds at different speeds + offsets for a parallax-like
+ * feel. Pure CSS, no JS, no reflows — just translateX on SVG groups.
+ * Each cloud drifts slowly right then resets, staggered so they
+ * don't all move in lockstep.
+ * ------------------------------------------------------------------ */
+@keyframes cloud-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(60px); }
+}
+
+.animate-cloud-1 {
+  animation: cloud-drift 20s ease-in-out infinite alternate;
+}
+.animate-cloud-2 {
+  animation: cloud-drift 28s ease-in-out infinite alternate-reverse;
+}
+.animate-cloud-3 {
+  animation: cloud-drift 24s ease-in-out infinite alternate;
+  animation-delay: -8s;
+}
+
+/* Cakey's follow speech-bubble pop-in.
+ * The -0.5rem lift that used to be a static `-translate-y-2` on the card is
+ * baked into the keyframe so the CSS animation transform doesn't clobber it.
+ * The whole bubble is `pointer-events-none` and only its inner card animates
+ * (scale + opacity), so the rAF follow-loop — which drives left/top/opacity on
+ * the WRAPPER — is never touched and there's no layout jank.
+ * ------------------------------------------------------------------ */
+@keyframes cakey-pop {
+  0%   { opacity: 0; transform: translateY(-0.5rem) scale(0.82); }
+  60%  { opacity: 1; transform: translateY(-0.5rem) scale(1.04); }
+  100% { opacity: 1; transform: translateY(-0.5rem) scale(1); }
+}
+.animate-cakey-pop {
+  transform-origin: bottom left; /* grow up out of the tail toward Cakey */
+  animation: cakey-pop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-cakey-pop {
+    animation: none;
+    transform: translateY(-0.5rem); /* keep the lift, drop the motion */
+  }
+}

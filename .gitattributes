@@ -1,0 +1,16 @@
+# Authored source art. Large, binary, and never needed by a deployment build —
+# these are the files Git LFS actually exists for.
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.ktx2 filter=lfs diff=lfs merge=lfs -text
+*.hdr filter=lfs diff=lfs merge=lfs -text
+*.exr filter=lfs diff=lfs merge=lfs -text
+art/**/*.glb filter=lfs diff=lfs merge=lfs -text
+
+# Runtime scenes are deliberately NOT in LFS. Vercel builds gamecakes.org
+# straight from a master merge and does not fetch LFS objects, so an LFS-tracked
+# file under public/ would be checked out as a ~130-byte pointer: the prebuild
+# validator would fail on the hash and every production deploy would break.
+# These GLBs are small and regenerated deterministically by
+# `npm run needle:generate-spike`, so plain Git is the correct home.
+# -text is required so CRLF conversion can never corrupt the binary.
+public/**/*.glb -filter -diff -merge -text

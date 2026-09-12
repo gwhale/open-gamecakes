@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "asset": "game-dome-spike.glb",
+  "sha256": "a4870b06199ebddfec1d2e624b85a005b998a58abc7062a1b157ce527577977b",
+  "bytes": 59204,
+  "source": "scripts/needle/generate-spike-dome.mjs",
+  "component": {
+    "type": "GameDome",
+    "stableId": "dome-cookie-corner-word-memory",
+    "regionSlug": "cookie-corner",
+    "gameSlug": "word-memory"
+  },
+  "requiresExtension": "NEEDLE_components",
+  "requiredNodes": [
+    "GameDome__cookie-corner__word-memory",
+    "DomeBase",
+    "UnlockedVisual",
+    "PortalAnchor",
+    "HighlightTarget",
+    "InteractionAnchor",
+    "CompletionBadgeAnchor",
+    "RewardAnchor"
+  ],
+  "budgets": {
+    "maxBytes": 500000,
+    "maxMeshes": 4,
+    "maxMaterials": 4
+  }
+}
