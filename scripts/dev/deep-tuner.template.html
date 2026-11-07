@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sunken Batterlands — seabed &amp; chest tuner</title>
+<style>
+  :root{
+    --bg:#0a1220; --panel:#111c2e; --edge:#1e2f47; --ink:#dce7f5; --dim:#7f95b0;
+    --accent:#37c8d4; --warn:#ffb648; --bad:#ff6b6b; --good:#5fd98a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+  header{padding:14px 18px;border-bottom:1px solid var(--edge);display:flex;
+         gap:16px;align-items:baseline;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.01em}
+  header .meta{color:var(--dim);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+  main{display:flex;gap:18px;padding:18px;align-items:flex-start;flex-wrap:wrap}
+  aside{width:300px;flex:0 0 300px}
+  .views{flex:1 1 700px;min-width:340px}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:10px;
+        padding:14px;margin-bottom:14px}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+           color:var(--dim);margin:0 0 10px;font-weight:650}
+  .card h2 .hint{text-transform:none;letter-spacing:0;font-weight:400;opacity:.75}
+  .slider{margin-bottom:13px}
+  .slider label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+  .slider label b{font-family:ui-monospace,Consolas,monospace;font-weight:500}
+  .slider .val{font-family:ui-monospace,Consolas,monospace;color:var(--accent)}
+  .slider .val.moved{color:var(--warn)}
+  .slider input[type=range]{width:100%;accent-color:var(--accent)}
+  .slider .note{font-size:10.5px;color:var(--dim);margin-top:2px}
+  input[type=text]{width:100%;background:#0a1220;border:1px solid var(--edge);
+    color:var(--ink);border-radius:6px;padding:6px 8px;
+    font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  button{background:#1b2b44;border:1px solid var(--edge);color:var(--ink);
+    border-radius:6px;padding:7px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#06202a;border-color:var(--accent);font-weight:650}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  canvas{display:block;max-width:100%;border-radius:8px;background:#06101d}
+  #map{cursor:crosshair;touch-action:none}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--edge)}
+  th{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  td.num{font-family:ui-monospace,Consolas,monospace;text-align:right}
+  tbody tr{cursor:pointer}
+  tr.bad td{background:rgba(255,107,107,.10)}
+  tr.sel td{background:rgba(55,200,212,.12)}
+  .pill{display:inline-block;padding:1px 6px;border-radius:99px;font-size:10.5px;
+        border:1px solid var(--edge)}
+  .ok{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .issues{list-style:none;margin:0;padding:0;font-size:12px}
+  .issues li{padding:4px 0;border-bottom:1px solid var(--edge)}
+  .issues li:last-child{border:0}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:8px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;
+            vertical-align:-1px;outline:1px solid rgba(220,231,245,.25)}
+  .readout{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--dim);
+           margin-top:8px;min-height:17px}
+  textarea{width:100%;height:150px;background:#06101d;color:var(--ink);border:1px solid var(--edge);
+    border-radius:6px;padding:8px;font-family:ui-monospace,Consolas,monospace;font-size:11px}
+  .hint{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sunken Batterlands — seabed &amp; chest tuner</h1>
+  <span class="meta" id="prov"></span>
+</header>
+
+<main>
+  <aside>
+    <div class="card">
+      <h2>Seabed anchors <span class="hint">ocean-floor.ts · types.ts</span></h2>
+      <div id="sliders"></div>
+    </div>
+
+    <div class="card">
+      <h2>World seed <span class="hint">world-math.ts</span></h2>
+      <input type="text" id="seed" spellcheck="false">
+      <div class="note hint" style="margin-top:6px">
+        Changing this moves every ridge in the ocean. Chest x/z stay put, so their
+        depths shift underneath them — which is what the table is for.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Checks <span class="hint">chest-catalog.test.ts</span></h2>
+      <ul class="issues" id="issues"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="primary" id="export">Show diff</button>
+        <button id="copy">Copy</button>
+        <button id="reset">Reset all</button>
+      </div>
+      <textarea id="out" spellcheck="false" placeholder="Tweak something, then press Show diff to get the source edits."></textarea>
+    </div>
+  </aside>
+
+  <section class="views">
+    <div class="card">
+      <h2>Map — depth, bands, chests</h2>
+      <canvas id="map" width="760" height="760"></canvas>
+      <div class="readout" id="readout">&nbsp;</div>
+      <div class="legend">
+        <span><i style="background:#efdfb8"></i>reef shallows</span>
+        <span><i style="background:#2ec4c8"></i>shelf</span>
+        <span><i style="background:#1a6fa8"></i>the drop</span>
+        <span><i style="background:#0b2140"></i>canyon floor</span>
+        <span><i style="background:#ffb648"></i>band edge (100 m / 300 m)</span>
+        <span><i style="background:#ff6b6b"></i>hull limit</span>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        Drag a chest to move it. Hover anywhere to drive the cross-section.
+        <label style="margin-left:10px"><input type="checkbox" id="showReach"> reach rings</label>
+        <label style="margin-left:6px"><input type="checkbox" id="showSonar"> sonar range</label>
+        <label style="margin-left:6px"><input type="checkbox" id="showSep" checked> 100 m spacing</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Cross-section — depth against z <span class="hint" id="secx"></span></h2>
+      <canvas id="section" width="760" height="230"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Chests</h2>
+      <table>
+        <thead><tr>
+          <th>slug</th><th>item</th><th>band</th>
+          <th class="num">x</th><th class="num">z</th>
+          <th class="num">depth</th><th>status</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+/*__MATH__*/
+
+const D = /*__DATA__*/;
+
+// ---------------------------------------------------------------- state ----
+const P = Object.assign({}, D.defaults);
+const CHESTS = D.chests.map(function (c) { return Object.assign({}, c); });
+const ORIG = D.chests.map(function (c) { return Object.assign({}, c); });
+let floor = makeFloor(P);
+let sectionX = 0;
+let dragging = -1;
+let selected = -1;
+
+// Half-extent of the drawn map, metres. FIXED on purpose, and wider than the
+// default bowl: if the view rescaled with DOMAIN_RADIUS_M, shrinking the world
+// would look identical to leaving it alone.
+const VIEW = 700;
+const SIZE = 760;
+const RES = 260;   // terrain sample grid, drawn scaled up
+
+const SLIDERS = [
+  ['REEF_DEPTH_M', 2, 60, 1, 'Shallowest water in the reef.'],
+  ['SHELF_EDGE_M', 40, 200, 1, 'Depth at the seaward edge of the shelf, before the drop.'],
+  ['CANYON_LIP_M', 150, 400, 1, 'Where the cliffs start. Also the floor of the canyon band.'],
+  ['CANYON_FLOOR_M', 300, 700, 5, 'Bottom of the world. Below the hull limit on purpose.'],
+  ['DEPTH_LIMIT_M', 150, 500, 5, 'How deep Sub-Cake One may go. The reachability line.'],
+  ['DOMAIN_RADIUS_M', 300, 900, 10, 'Radius of the divable bowl.'],
+];
+
+document.getElementById('prov').textContent =
+  'from ' + D.sha + ' · built ' + D.builtAt +
+  (D.dirty ? ' · ' + D.dirty + ' uncommitted file(s) in deep/items' : '');
+
+// --------------------------------------------------------------- helpers ----
+function depthAt(x, z) { return -floor(x, z); }
+function toPx(v) { return (v + VIEW) / (2 * VIEW) * SIZE; }
+function toWorld(p) { return p / SIZE * 2 * VIEW - VIEW; }
+
+function bandOfDepth(d) {
+  if (d <= D.bands.reef.to) return 'reef';
+  if (d <= D.bands.kelp.to) return 'kelp';
+  return 'canyon';
+}
+
+// Hypsometric ramp: sand, shelf, the drop, canyon.
+const STOPS = [
+  [0, [242, 226, 184]], [25, [226, 206, 150]], [60, [96, 200, 196]],
+  [100, [46, 166, 190]], [180, [26, 111, 168]], [300, [18, 62, 120]],
+  [430, [11, 33, 64]], [700, [6, 16, 34]]
+];
+function ramp(d) {
+  if (d <= STOPS[0][0]) return STOPS[0][1];
+  for (let i = 1; i < STOPS.length; i++) {
+    if (d <= STOPS[i][0]) {
+      const a = STOPS[i - 1], b = STOPS[i];
+      const t = (d - a[0]) / (b[0] - a[0]);
+      return [a[1][0] + (b[1][0] - a[1][0]) * t,
+              a[1][1] + (b[1][1] - a[1][1]) * t,
+              a[1][2] + (b[1][2] - a[1][2]) * t];
+    }
+  }
+  return STOPS[STOPS.length - 1][1];
+}
+
+// ------------------------------------------------------------ terrain img ----
+const terrain = document.createElement('canvas');
+terrain.width = RES; terrain.height = RES;
+const tctx = terrain.getContext('2d');
+
+function renderTerrain() {
+  const img = tctx.createImageData(RES, RES);
+  const grid = new Float32Array(RES * RES);
+  for (let j = 0; j < RES; j++) {
+    const z = -VIEW + (2 * VIEW * j) / (RES - 1);
+    for (let i = 0; i < RES; i++) {
+      const x = -VIEW + (2 * VIEW * i) / (RES - 1);
+      grid[j * RES + i] = depthAt(x, z);
+    }
+  }
+  const lim = P.DEPTH_LIMIT_M;
+  const idx = function (v) { return Math.floor(v / 20); };
+  for (let j = 0; j < RES; j++) {
+    for (let i = 0; i < RES; i++) {
+      const k = j * RES + i;
+      const d = grid[k];
+      const c = ramp(d);
+      let r = c[0], g = c[1], b = c[2];
+
+      // Contours by band-index change against the left/up neighbour: cheap, and
+      // it cannot miss a crossing the way sampling a threshold can.
+      const dl = i > 0 ? grid[k - 1] : d;
+      const du = j > 0 ? grid[k - RES] : d;
+      if (idx(d) !== idx(dl) || idx(d) !== idx(du)) { r *= 0.86; g *= 0.86; b *= 0.86; }
+      const cross = function (t) {
+        return ((d >= t) !== (dl >= t)) || ((d >= t) !== (du >= t));
+      };
+      if (cross(D.bands.reef.to) || cross(D.bands.kelp.to)) { r = 255; g = 182; b = 72; }
+      if (cross(lim)) { r = 255; g = 107; b = 107; }
+
+      const o = k * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  }
+  tctx.putImageData(img, 0, 0);
+}
+
+// ------------------------------------------------------------------ map ----
+const map = document.getElementById('map');
+const mctx = map.getContext('2d');
+
+function drawMap() {
+  mctx.clearRect(0, 0, SIZE, SIZE);
+  mctx.imageSmoothingEnabled = true;
+  mctx.drawImage(terrain, 0, 0, SIZE, SIZE);
+
+  // Outside the bowl the sub is turned back, so dim it.
+  const R = P.DOMAIN_RADIUS_M / (2 * VIEW) * SIZE;
+  mctx.save();
+  mctx.fillStyle = 'rgba(6,16,29,.72)';
+  mctx.beginPath();
+  mctx.rect(0, 0, SIZE, SIZE);
+  mctx.arc(SIZE / 2, SIZE / 2, R, 0, Math.PI * 2, true);
+  mctx.fill();
+  mctx.restore();
+  mctx.strokeStyle = '#8fb3d9';
+  mctx.lineWidth = 1.5;
+  mctx.setLineDash([5, 4]);
+  mctx.beginPath(); mctx.arc(SIZE / 2, SIZE / 2, R, 0, Math.PI * 2); mctx.stroke();
+  mctx.setLineDash([]);
+
+  mctx.font = '11px ui-monospace,Consolas,monospace';
+  mctx.fillStyle = 'rgba(220,231,245,.75)';
+  mctx.fillText('N — surface, Caramel Cove', 10, 16);
+  mctx.fillText('S — canyon', 10, SIZE - 10);
+
+  // Cross-section cursor.
+  const sx = toPx(sectionX);
+  mctx.strokeStyle = 'rgba(55,200,212,.55)';
+  mctx.lineWidth = 1;
+  mctx.setLineDash([3, 3]);
+  mctx.beginPath(); mctx.moveTo(sx, 0); mctx.lineTo(sx, SIZE); mctx.stroke();
+  mctx.setLineDash([]);
+
+  // Spawn.
+  const spx = toPx(D.spawn.x), spz = toPx(D.spawn.z);
+  mctx.strokeStyle = '#dce7f5';
+  mctx.lineWidth = 1.5;
+  mctx.beginPath(); mctx.arc(spx, spz, 6, 0, Math.PI * 2); mctx.stroke();
+  mctx.beginPath();
+  mctx.moveTo(spx, spz - 9); mctx.lineTo(spx, spz + 9);
+  mctx.moveTo(spx - 9, spz); mctx.lineTo(spx + 9, spz);
+  mctx.stroke();
+  mctx.fillStyle = 'rgba(220,231,245,.8)';
+  mctx.fillText('spawn', spx + 10, spz + 4);
+
+  const showReach = document.getElementById('showReach').checked;
+  const showSonar = document.getElementById('showSonar').checked;
+  const showSep = document.getElementById('showSep').checked;
+  const mPx = SIZE / (2 * VIEW);
+
+  CHESTS.forEach(function (c, i) {
+    const px = toPx(c.x), pz = toPx(c.z);
+    const d = depthAt(c.x, c.z);
+    const bad = statusOf(i).length > 0;
+
+    if (showSep) {
+      mctx.strokeStyle = 'rgba(255,255,255,.10)';
+      mctx.beginPath(); mctx.arc(px, pz, 100 * mPx, 0, Math.PI * 2); mctx.stroke();
+    }
+    if (showSonar) {
+      mctx.strokeStyle = 'rgba(55,200,212,.18)';
+      mctx.beginPath(); mctx.arc(px, pz, D.sonarM * mPx, 0, Math.PI * 2); mctx.stroke();
+    }
+    if (showReach) {
+      mctx.strokeStyle = 'rgba(95,217,138,.65)';
+      mctx.beginPath(); mctx.arc(px, pz, Math.max(3, D.reachM * mPx), 0, Math.PI * 2); mctx.stroke();
+    }
+
+    // Leader line back to the authored position.
+    const o = ORIG[i];
+    if (o.x !== c.x || o.z !== c.z) {
+      mctx.strokeStyle = 'rgba(255,182,72,.65)';
+      mctx.setLineDash([3, 3]);
+      mctx.beginPath();
+      mctx.moveTo(toPx(o.x), toPx(o.z));
+      mctx.lineTo(px, pz);
+      mctx.stroke();
+      mctx.setLineDash([]);
+    }
+
+    mctx.beginPath();
+    mctx.rect(px - 6, pz - 6, 12, 12);
+    mctx.fillStyle = bad ? '#ff6b6b' : (i === selected ? '#37c8d4' : '#f0d9a8');
+    mctx.fill();
+    mctx.lineWidth = i === selected ? 2.5 : 1.5;
+    mctx.strokeStyle = '#06101d';
+    mctx.stroke();
+
+    mctx.fillStyle = 'rgba(255,255,255,.92)';
+    mctx.font = '10.5px ui-monospace,Consolas,monospace';
+    mctx.fillText(c.item + '  ' + d.toFixed(0) + 'm', px + 9, pz + 4);
+  });
+}
+
+// -------------------------------------------------------------- section ----
+const sec = document.getElementById('section');
+const sctx = sec.getContext('2d');
+const SW = 760, SH = 230, PAD = 28;
+
+function drawSection() {
+  sctx.clearRect(0, 0, SW, SH);
+  const maxD = Math.max(P.CANYON_FLOOR_M * 1.05, P.DEPTH_LIMIT_M * 1.1);
+  const yOf = function (d) { return PAD + (d / maxD) * (SH - PAD * 2); };
+  const xOf = function (z) { return ((z + VIEW) / (2 * VIEW)) * SW; };
+
+  const grad = sctx.createLinearGradient(0, PAD, 0, SH - PAD);
+  grad.addColorStop(0, '#123b57');
+  grad.addColorStop(1, '#050c18');
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, PAD, SW, SH - PAD * 2);
+
+  sctx.beginPath();
+  sctx.moveTo(0, SH - PAD);
+  for (let i = 0; i <= 480; i++) {
+    const z = -VIEW + (2 * VIEW * i) / 480;
+    sctx.lineTo(xOf(z), yOf(depthAt(sectionX, z)));
+  }
+  sctx.lineTo(SW, SH - PAD);
+  sctx.closePath();
+  sctx.fillStyle = '#26405e';
+  sctx.fill();
+  sctx.strokeStyle = '#8fb3d9';
+  sctx.lineWidth = 1.2;
+  sctx.stroke();
+
+  // The band edge and the hull limit can sit a few metres apart, so the labels
+  // are staggered horizontally rather than stacked — at the shipped values they
+  // are 20m apart, which is under one line of text.
+  const line = function (d, col, label, lx) {
+    sctx.strokeStyle = col;
+    sctx.lineWidth = 1;
+    sctx.setLineDash([5, 4]);
+    sctx.beginPath(); sctx.moveTo(0, yOf(d)); sctx.lineTo(SW, yOf(d)); sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.font = '10.5px ui-monospace,Consolas,monospace';
+    const text = label + ' ' + Math.round(d) + 'm';
+    const w = sctx.measureText(text).width;
+    sctx.fillStyle = 'rgba(5,12,24,.78)';
+    sctx.fillRect(lx - 3, yOf(d) - 13, w + 6, 13);
+    sctx.fillStyle = col;
+    sctx.fillText(text, lx, yOf(d) - 3);
+  };
+  line(D.bands.reef.to, '#ffb648', 'reef / kelp', 6);
+  line(D.bands.kelp.to, '#ffb648', 'kelp / canyon', 6);
+  line(P.DEPTH_LIMIT_M, '#ff6b6b', 'hull limit', 170);
+
+  CHESTS.forEach(function (c, i) {
+    if (Math.abs(c.x - sectionX) > 50) return;
+    const x = xOf(c.z), y = yOf(depthAt(c.x, c.z));
+    sctx.fillStyle = statusOf(i).length ? '#ff6b6b' : '#f0d9a8';
+    sctx.fillRect(x - 4, y - 4, 8, 8);
+    sctx.fillStyle = 'rgba(255,255,255,.9)';
+    sctx.fillText(c.item, x + 7, y + 3);
+  });
+
+  document.getElementById('secx').textContent = 'at x = ' + sectionX.toFixed(0) + ' m';
+}
+
+// ------------------------------------------------------------ validation ----
+// Mirrors src/lib/deep/chest-catalog.test.ts. If a tweak turns a row red here,
+// it turns CI red too.
+function statusOf(i) {
+  const c = CHESTS[i];
+  const d = depthAt(c.x, c.z);
+  const out = [];
+  if (d >= P.DEPTH_LIMIT_M) out.push('below the hull limit');
+  const r = D.bands[c.band];
+  if (d < r.from || d > r.to) {
+    out.push('not in ' + c.band + ' (' + r.from + '-' + r.to + 'm)');
+  }
+  if (Math.hypot(c.x, c.z) >= P.DOMAIN_RADIUS_M) out.push('outside the bowl');
+  for (let j = 0; j < CHESTS.length; j++) {
+    if (j === i) continue;
+    const o = CHESTS[j];
+    if (Math.hypot(c.x - o.x, c.z - o.z) <= 100) {
+      out.push('within 100 m of ' + o.slug);
+      break;
+    }
+  }
+  return out;
+}
+
+function drawTable() {
+  const rows = CHESTS.map(function (c, i) {
+    const d = depthAt(c.x, c.z);
+    const bad = statusOf(i);
+    const moved = (c.x !== ORIG[i].x || c.z !== ORIG[i].z);
+    const item = D.items.find(function (t) { return t.slug === c.item; });
+    return '<tr class="' + (bad.length ? 'bad' : '') + (i === selected ? ' sel' : '') + '" data-i="' + i + '">'
+      + '<td>' + c.slug + (moved ? ' <span class="warn">*</span>' : '') + '</td>'
+      + '<td>' + (item ? item.emoji + ' ' + item.name : c.item) + '</td>'
+      + '<td><span class="pill">' + c.band + '</span></td>'
+      + '<td class="num">' + c.x.toFixed(0) + '</td>'
+      + '<td class="num">' + c.z.toFixed(0) + '</td>'
+      + '<td class="num">' + d.toFixed(1) + '</td>'
+      + '<td class="' + (bad.length ? 'bad' : 'ok') + '">' + (bad.length ? bad.join('; ') : 'ok') + '</td>'
+      + '</tr>';
+  }).join('');
+  document.getElementById('rows').innerHTML = rows;
+  Array.prototype.forEach.call(document.querySelectorAll('#rows tr'), function (tr) {
+    tr.onclick = function () {
+      selected = Number(tr.dataset.i);
+      sectionX = CHESTS[selected].x;
+      redrawOverlays();
+    };
+  });
+
+  const issues = [];
+  CHESTS.forEach(function (c, i) {
+    statusOf(i).forEach(function (s) { issues.push(c.slug + ' — ' + s); });
+  });
+  const el = document.getElementById('issues');
+  if (!issues.length) {
+    el.innerHTML = '<li class="ok">All ' + CHESTS.length + ' chests pass every geometric check.</li>';
+  } else {
+    el.innerHTML = issues.map(function (s) { return '<li class="bad">' + s + '</li>'; }).join('');
+  }
+}
+
+// ------------------------------------------------------------------- ui ----
+function buildSliders() {
+  const host = document.getElementById('sliders');
+  host.innerHTML = SLIDERS.map(function (s) {
+    const k = s[0];
+    return '<div class="slider"><label><b>' + k + '</b>'
+      + '<span class="val" id="v_' + k + '"></span></label>'
+      + '<input type="range" id="s_' + k + '" min="' + s[1] + '" max="' + s[2]
+      + '" step="' + s[3] + '" value="' + P[k] + '">'
+      + '<div class="note">' + s[4] + '</div></div>';
+  }).join('');
+  SLIDERS.forEach(function (s) {
+    document.getElementById('s_' + s[0]).addEventListener('input', function (e) {
+      P[s[0]] = Number(e.target.value);
+      floor = makeFloor(P);
+      schedule(true);
+    });
+  });
+}
+
+function syncSliderLabels() {
+  SLIDERS.forEach(function (s) {
+    const el = document.getElementById('v_' + s[0]);
+    el.textContent = P[s[0]] + ' m';
+    el.className = 'val' + (P[s[0]] !== D.defaults[s[0]] ? ' moved' : '');
+  });
+}
+
+let pending = null, needTerrain = false;
+function schedule(wantTerrain) {
+  needTerrain = needTerrain || !!wantTerrain;
+  if (pending) return;
+  pending = requestAnimationFrame(function () {
+    pending = null;
+    if (needTerrain) { renderTerrain(); needTerrain = false; }
+    syncSliderLabels();
+    drawMap();
+    drawSection();
+    drawTable();
+  });
+}
+function redrawOverlays() { schedule(false); }
+function redrawAll() { schedule(true); }
+
+function evtWorld(e) {
+  const r = map.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (SIZE / r.width);
+  const pz = (e.clientY - r.top) * (SIZE / r.height);
+  return { x: toWorld(px), z: toWorld(pz), px: px, pz: pz };
+}
+map.addEventListener('pointerdown', function (e) {
+  const w = evtWorld(e);
+  let best = -1, bestD = 14;
+  CHESTS.forEach(function (c, i) {
+    const d = Math.hypot(toPx(c.x) - w.px, toPx(c.z) - w.pz);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  if (best >= 0) {
+    dragging = best;
+    selected = best;
+    map.setPointerCapture(e.pointerId);
+    redrawOverlays();
+  }
+});
+map.addEventListener('pointermove', function (e) {
+  const w = evtWorld(e);
+  if (dragging >= 0) {
+    CHESTS[dragging].x = Math.round(w.x);
+    CHESTS[dragging].z = Math.round(w.z);
+  }
+  sectionX = w.x;
+  const d = depthAt(w.x, w.z);
+  document.getElementById('readout').textContent =
+    'x ' + w.x.toFixed(0) + '   z ' + w.z.toFixed(0)
+    + '   depth ' + d.toFixed(1) + ' m   band ' + bandOfDepth(d)
+    + (d >= P.DEPTH_LIMIT_M ? '   — BELOW HULL LIMIT' : '')
+    + (Math.hypot(w.x, w.z) >= P.DOMAIN_RADIUS_M ? '   — outside the bowl' : '');
+  redrawOverlays();
+});
+map.addEventListener('pointerup', function (e) {
+  dragging = -1;
+  map.releasePointerCapture(e.pointerId);
+});
+
+document.getElementById('seed').value = P.SEED;
+document.getElementById('seed').addEventListener('input', function (e) {
+  P.SEED = e.target.value;
+  floor = makeFloor(P);
+  redrawAll();
+});
+['showReach', 'showSonar', 'showSep'].forEach(function (id) {
+  document.getElementById(id).addEventListener('change', redrawOverlays);
+});
+
+document.getElementById('reset').onclick = function () {
+  Object.assign(P, D.defaults);
+  CHESTS.forEach(function (c, i) { c.x = ORIG[i].x; c.z = ORIG[i].z; });
+  SLIDERS.forEach(function (s) { document.getElementById('s_' + s[0]).value = P[s[0]]; });
+  document.getElementById('seed').value = P.SEED;
+  document.getElementById('out').value = '';
+  floor = makeFloor(P);
+  selected = -1;
+  redrawAll();
+};
+
+function buildDiff() {
+  const parts = [];
+  const FLOOR_KEYS = ['REEF_DEPTH_M', 'SHELF_EDGE_M', 'CANYON_LIP_M', 'CANYON_FLOOR_M'];
+  const TYPE_KEYS = ['DEPTH_LIMIT_M', 'DOMAIN_RADIUS_M'];
+  const changed = SLIDERS.map(function (s) { return s[0]; })
+    .filter(function (k) { return P[k] !== D.defaults[k]; });
+
+  if (P.SEED !== D.defaults.SEED) {
+    parts.push('// src/lib/deep/world-math.ts');
+    parts.push("export const WORLD_SEED = '" + P.SEED + "';");
+    parts.push('// Read the comment on WORLD_SEED first: changing it moves every place');
+    parts.push('// in the ocean, and kid_deep_discoveries rows already point at these.');
+    parts.push('');
+  }
+  const inFloor = changed.filter(function (k) { return FLOOR_KEYS.indexOf(k) >= 0; });
+  if (inFloor.length) {
+    parts.push('// src/lib/deep/ocean-floor.ts');
+    inFloor.forEach(function (k) { parts.push('const ' + k + ' = ' + P[k] + ';'); });
+    parts.push('');
+  }
+  const inTypes = changed.filter(function (k) { return TYPE_KEYS.indexOf(k) >= 0; });
+  if (inTypes.length) {
+    parts.push('// src/lib/deep/types.ts');
+    inTypes.forEach(function (k) { parts.push('export const ' + k + ' = ' + P[k] + ';'); });
+    parts.push('');
+  }
+
+  const moved = [];
+  CHESTS.forEach(function (c, i) {
+    if (c.x !== ORIG[i].x || c.z !== ORIG[i].z) moved.push(i);
+  });
+  if (moved.length) {
+    parts.push('// src/lib/deep/chest-catalog.ts — ' + moved.length + ' chest(s) moved');
+    moved.forEach(function (i) {
+      const c = CHESTS[i], o = ORIG[i];
+      parts.push('  // ' + c.slug + ': was x ' + o.x + ', z ' + o.z
+        + ' (' + depthAt(o.x, o.z).toFixed(0) + 'm)  ->  ' + depthAt(c.x, c.z).toFixed(0) + 'm');
+      parts.push('    x: ' + c.x + ',');
+      parts.push('    z: ' + c.z + ',');
+    });
+    parts.push('');
+  }
+
+  const fails = [];
+  CHESTS.forEach(function (c, i) {
+    statusOf(i).forEach(function (s) { fails.push(c.slug + ' — ' + s); });
+  });
+  if (fails.length) {
+    parts.push('// !! chest-catalog.test.ts WILL FAIL on this:');
+    fails.forEach(function (f) { parts.push('//    ' + f); });
+  }
+  return parts.length ? parts.join('\n') : 'Nothing changed from the shipped values.';
+}
+
+document.getElementById('export').onclick = function () {
+  document.getElementById('out').value = buildDiff();
+};
+document.getElementById('copy').onclick = function () {
+  const t = document.getElementById('out');
+  if (!t.value) t.value = buildDiff();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(t.value).catch(function () { t.select(); });
+  } else {
+    t.select();
+  }
+};
+
+buildSliders();
+redrawAll();
+</script>
+</body>
+</html>

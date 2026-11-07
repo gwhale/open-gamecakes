@@ -1,0 +1,5 @@
+{
+  "assetsDirectory": "public/needle/scenes",
+  "scriptsDirectory": "src/lib/town/needle/components",
+  "codegenDirectory": "src/lib/town/needle/generated"
+}
