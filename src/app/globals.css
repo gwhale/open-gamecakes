@@ -1,0 +1,972 @@
+@import "tailwindcss";
+
+/* Keep Tailwind's source scanner out of the authored-art tree.
+ *
+ * `art/**` holds Blender sources, which are LFS-tracked. Tailwind v4 crawls
+ * every non-ignored file looking for class candidates, and .blend is not on its
+ * binary skip-list — so it reads a megabyte of binary as text, hits a byte run
+ * that parses as a CSS escape, and dies before any build output:
+ *
+ *   CssSyntaxError: tailwindcss: globals.css:1:1: Invalid code point 16018480
+ *
+ * 16018480 is 0xf46c30, well past the 0x10FFFF ceiling — random bytes, not a
+ * real escape. The reason CI never caught it: Vercel does not fetch Git LFS, so
+ * there these are ~130-byte ASCII pointer stubs that scan harmlessly. Only
+ * developers WITH the LFS content materialised get a hard-broken `next build`
+ * AND `next dev`, which made it look like a local-sandbox problem.
+ *
+ * Nothing under art/ ever contains a utility class, so scanning it is pure
+ * waste even when it doesn't crash. */
+@source not "../../art";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* Apple HIG minimum tap target — use on every tappable element on iPad. */
+  --min-tap-target: 44px;
+
+  /* ---- Gamecakes brand palette ---------------------------------------
+   * The three cake layers are the primary brand colors. Use these CSS
+   * vars (instead of hardcoded Tailwind classes) anywhere the brand
+   * identity should be felt — hero buttons, selected states, accents,
+   * celebration flourishes.
+   *
+   * The cherry and stem are secondary; they're used in the logo and
+   * rarely elsewhere. Highlight/tint variants are provided for use in
+   * hover states and backgrounds.
+   * -------------------------------------------------------------------- */
+  --brand-strawberry:      #fb7185; /* bottom layer — rose-400 */
+  --brand-strawberry-tint: #fda4af; /* rose-300, lighter */
+  --brand-strawberry-deep: #e11d48; /* rose-600, for press states */
+
+  --brand-vanilla:         #fde68a; /* middle layer — amber-200 */
+  --brand-vanilla-tint:    #fef3c7; /* amber-100 */
+
+  --brand-mint:            #6ee7b7; /* top layer — emerald-300 */
+  --brand-mint-tint:       #a7f3d0; /* emerald-200 */
+  --brand-mint-deep:       #10b981; /* emerald-500 */
+
+  --brand-cherry:          #dc2626; /* cherry — red-600 */
+  --brand-stem:            #166534; /* cherry stem — green-800 */
+
+  /* ---- Semantic action roles -----------------------------------------
+   * The brand vars above are IDENTITY (what Gamecakes is made of). These
+   * are MEANING (what a control does). Every interactive surface picks a
+   * role, never a raw hue — see DESIGN.md's Layer Rule.
+   *
+   *   act    — do the thing. Play, confirm, launch.        (rose)
+   *   earn   — currency and reward. Tokens, prices.        (amber)
+   *   grow   — unlock, upgrade, succeed.                   (emerald)
+   *   travel — go somewhere. Ferry, train, garage, lands.  (sky)
+   *   exit   — stop, hop off, close, go back.              (chrome, NOT candy)
+   *
+   * `exit` is deliberately outside the candy palette. Stopping isn't an
+   * achievement, so it must not look like one — that ambiguity is exactly
+   * what made "Play" and "Hop off" both rose before this.
+   *
+   * INK IS NOT A CHOICE. Each role's `-ink` is fixed by the luminance of
+   * its fill: fills dark enough to carry white text get white, the bright
+   * candy fills get a deep ink of their own hue. Every pair below is
+   * verified >= 4.70:1 at BOTH gradient stops (AA for 16px bold, which is
+   * the smallest these ever render). Worst pair in the system is `act` at
+   * 4.70. Never hand-pick a label colour; use the role's ink.
+   * -------------------------------------------------------------------- */
+  /* `-glow` carries its own alpha so the shell can drop it straight into a
+   * box-shadow. No color-mix(): that lands in iOS 16.2 and these iPads may
+   * be older. */
+  --act-from:    #e11d48; /* rose-600  */
+  --act-to:      #be123c; /* rose-700  */
+  --act-ink:     #ffffff; /* 4.70 / 6.29 */
+  --act-glow:    rgb(253 164 175 / 0.55); /* rose-300  */
+
+  --earn-from:   #fbbf24; /* amber-400 */
+  --earn-to:     #f59e0b; /* amber-500 */
+  --earn-ink:    #451a03; /* amber-950 — 8.97 / 6.97 */
+  --earn-glow:   rgb(252 211 77 / 0.55); /* amber-300 */
+
+  --grow-from:   #34d399; /* emerald-400 */
+  --grow-to:     #10b981; /* emerald-500 */
+  --grow-ink:    #022c22; /* emerald-950 — 7.88 / 5.97 */
+  --grow-glow:   rgb(110 231 183 / 0.55); /* emerald-300 */
+
+  --travel-from: #38bdf8; /* sky-400 */
+  --travel-to:   #0ea5e9; /* sky-500 */
+  --travel-ink:  #082f49; /* sky-950 — 6.48 / 5.01 */
+  --travel-glow: rgb(125 211 252 / 0.55); /* sky-300 */
+
+  --exit-from:   #27272a; /* zinc-800 */
+  --exit-to:     #18181b; /* zinc-900 */
+  --exit-ink:    #ffffff; /* 15.3 / 17.72 */
+  --exit-glow:   rgb(0 0 0 / 0.25);
+
+  /* Chrome — floating nav over a live canvas. Same ink as `exit`; kept
+   * separate because chrome is translucent + blurred and exit is solid. */
+  --chrome-fill: #18181b;
+  --chrome-ink:  #ffffff;
+
+  /* ---- Focus indicator ------------------------------------------------
+   * A two-tone ring, because no single colour can clear 3:1 against both a
+   * bright candy fill AND whatever the 3D town happens to be rendering
+   * behind it. The inner/outer pair contrasts 17.72:1 with ITSELF, so the
+   * indicator stays perceivable on any background — white page, dark page,
+   * sky, grass, sand. Candy controls use inner-dark/outer-light; dark
+   * controls (chrome, exit) swap them, since a dark ring on a dark pill is
+   * invisible.
+   * -------------------------------------------------------------------- */
+  --focus-dark:  #18181b;
+  --focus-light: #ffffff;
+}
+
+/* ---- The candy shell -------------------------------------------------------
+ * The visual body of every role-based control. Lives in CSS rather than a
+ * Tailwind class string for two reasons: the shadow stack is layered enough
+ * that utilities would be unreadable, and `:focus-visible` has to rewrite the
+ * whole box-shadow (you cannot add to one from an inline style).
+ *
+ * A component sets --c-from / --c-to / --c-ink / --c-glow from a role and
+ * everything below follows. The shadow layers, in paint order:
+ *   1. rim light      — the thin wet specular line along the top edge. This is
+ *                       the gloss. The previous 40%-tall white wash sat behind
+ *                       the label and cost ~2 stops of contrast; a rim reads as
+ *                       candy without touching the text.
+ *   2. bottom occlusion — grounds the shape so it reads solid, not printed.
+ *   3. hairline        — containment on any background.
+ *   4. drop glow       — tinted to the control's own hue (the Own-Hue Rule).
+ * -------------------------------------------------------------------------- */
+.candy-shell {
+  background: linear-gradient(to bottom right, var(--c-from), var(--c-to));
+  color: var(--c-ink);
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 10px 15px -3px var(--c-glow);
+}
+
+/* Press drops the object: the glow collapses toward the surface. Paired with
+ * `active:scale-95` on the element. Required — the global
+ * -webkit-tap-highlight-color:transparent means colour alone is not feedback. */
+.candy-shell:active {
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 3px 6px -2px var(--c-glow);
+}
+
+/* Two-tone focus ring. No single colour clears 3:1 against both a bright candy
+ * fill and an arbitrary 3D scene, so the ring contrasts with ITSELF (17.72:1)
+ * and stays perceivable on any backdrop. Dark sits inside against the fill;
+ * light sits outside against the page. */
+.candy-shell:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1.5px 0 0 rgb(255 255 255 / 0.55),
+    inset 0 -2px 0 0 rgb(0 0 0 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 0 0 2px var(--focus-dark),
+    0 0 0 5px var(--focus-light);
+}
+
+/* Inert (disabled). NOT `opacity: 0.5` — that fades the fill and the label
+ * together and drops every role to ~2.0-2.4:1. That would be WCAG-legal
+ * (disabled controls are exempt) and still wrong here, because in Gamecakes the
+ * disabled state is where the REASON lives: the ferry button reads "Need 1 —
+ * play games!" exactly when it's disabled. A kid has to be able to read the one
+ * message that tells them what to do next.
+ *
+ * So an inert control goes flat and neutral, keeps a full-strength label, and
+ * drops the lift entirely — it isn't candy any more, and it isn't pressable. */
+.candy-shell:disabled,
+.candy-shell[aria-disabled='true'] {
+  background: #e4e4e7;
+  color: #3f3f46; /* 8.23:1 */
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  cursor: not-allowed;
+}
+@media (prefers-color-scheme: dark) {
+  .candy-shell:disabled,
+  .candy-shell[aria-disabled='true'] {
+    background: #3f3f46;
+    color: #d4d4d8; /* 7.07:1 */
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  }
+}
+
+/* Chrome carries the same two-tone ring, but which tone sits against the pill
+ * depends on the pill. The inner band must contrast with the FILL, so a dark
+ * pill needs a light inner and a light pill needs a dark one — on the light
+ * variant the inherited light-inner was 1.02:1 against its own fill, wasting
+ * 2 of the ring's 5px. The component sets the pair; the default here is the
+ * dark pill because that is the common case (game canvases, the 3D town). */
+.chrome-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--ring-inner, var(--focus-light)),
+    0 0 0 5px var(--ring-outer, var(--focus-dark));
+}
+
+/* Inert chrome. Same reasoning as `.candy-shell:disabled`: fade the pill, keep
+ * the label. A chrome pill rarely carries a message, but a system that states a
+ * rule and then breaks it in one component is how drift starts. */
+.chrome-inert:disabled,
+.chrome-inert[aria-disabled='true'] {
+  background: #e4e4e7;
+  border-color: rgb(0 0 0 / 0.08);
+  color: #3f3f46; /* 8.23:1 */
+  box-shadow: none;
+  backdrop-filter: none;
+  cursor: not-allowed;
+}
+@media (prefers-color-scheme: dark) {
+  .chrome-inert:disabled,
+  .chrome-inert[aria-disabled='true'] {
+    background: #3f3f46;
+    border-color: rgb(255 255 255 / 0.08);
+    color: #d4d4d8; /* 7.07:1 */
+  }
+}
+
+/* Motion: the press and the ring are feedback, so they stay — they just stop
+ * animating. Anything that only moves for flavour is already handled at its
+ * own callsite. */
+@media (prefers-reduced-motion: reduce) {
+  .candy-shell,
+  .chrome-focus {
+    transition-duration: 1ms;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  /* Display font — Fredoka, rounded + chunky. Used by Tailwind's
+   * `font-display` utility on headings, game titles, and any UI text
+   * that should feel kid-friendly. Body type stays --font-sans. */
+  --font-display: var(--font-fredoka);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Prefer the Geist sans font provided by layout.tsx; fall back cleanly. */
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Display font for headings — Fredoka, rounded + chunky, far more
+ * kid-friendly than the body sans. Applied at the element selector
+ * so every h1-h3 across the site gets the upgrade without component
+ * edits; opt out per-element with `font-sans` if needed (rare). */
+h1, h2, h3 {
+  font-family: var(--font-display), var(--font-sans),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Safe-area-aware fixed overlays --------------------------------------
+ * In standalone PWA mode the iPad home indicator overlaps the bottom edge.
+ * Fixed bottom prompts (the town's Play / ferry / train buttons, hint toasts)
+ * use these instead of Tailwind's bottom-6 / bottom-24 so they clear it.
+ * `env()` resolves to 0 inside Safari tabs, so this is a no-op there.
+ * (The old approach padded every h1-h3 with the insets — the wrong target:
+ * headings aren't pinned to screen edges, fixed overlays are.)
+ * -------------------------------------------------------------------------- */
+.fixed-bottom-safe {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+.fixed-bottom-safe-hi {
+  bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+/* Story toast: one button-height above the -hi row, so it never covers the
+ * Sugar Express / quick-ride buttons that sit there. */
+.fixed-bottom-safe-toast {
+  bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---- Submarine instrument panel (components/deep/NavBox) ------------------
+ * The full panel -- compass dial, coordinates, chart -- is ~310px tall and
+ * sits on the left edge, vertically centred. The steering pad is 124px across
+ * and sits 6rem off the bottom on the SAME side, so it owns the bottom ~220px
+ * of the left edge. Centred, the panel clears it only above about 754px of
+ * viewport height.
+ *
+ * So the panel gives ground in two steps rather than one. First it stops being
+ * centred and anchors under the top chrome, which buys everything down to
+ * ~620px (top-anchored the full panel ends at 382px, and the pad claims
+ * everything below vh-220, so it needs vh > 602 -- 620 leaves margin).
+ * Below that nothing fits, and what survives is what was actually
+ * asked for: the heading and the two coordinates. The dial and the chart are
+ * the parts you can lose and still navigate.
+ *
+ * The panel is pointer-events-none, so even a miscalculation here can never
+ * cost a kid the steering pad -- it would only look wrong.
+ * -------------------------------------------------------------------------- */
+@media (max-height: 759px) {
+  .nav-box {
+    top: 4rem;
+    /* Tailwind v4 centres this with the `translate` PROPERTY, not a transform,
+       so `transform: none` cancels nothing and the panel lifts 50% of its own
+       height off the top of the screen instead. */
+    translate: none;
+  }
+}
+@media (max-height: 619px) {
+  .nav-box {
+    width: auto;
+  }
+  .nav-box-full {
+    display: none;
+  }
+}
+
+/* ---- Standalone PWA chrome ------------------------------------------------
+ * When a kid opens Gamecakes from the home-screen icon, iOS launches
+ * the app with `display-mode: standalone` — no Safari URL bar, no
+ * tab strip. The body extends edge to edge. Use a brand-tinted bg
+ * here (instead of the default white) so the strip behind the
+ * notch / home indicator doesn't look like blank web chrome.
+ * -------------------------------------------------------------------------- */
+@media (display-mode: standalone) {
+  body {
+    background: linear-gradient(135deg, #fecdd3 0%, #fde68a 60%, #bbf7d0 100%);
+  }
+}
+
+/* ---- View transitions ------------------------------------------------------
+ * Next.js App Router supports the View Transitions API for cross-document
+ * animations. Default Safari/Chromium behavior is a 200ms cross-fade
+ * between routes, which already eliminates the harsh white flash that
+ * plagues SPAs. Customize the timing here so it feels snappier (140ms,
+ * eased) and matches the brand pace.
+ * -------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 140ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* ---- iOS / tablet "app-like" polish --------------------------------------
+ * Without these rules, kid taps on iPad feel noticeably worse than the
+ * Phaser canvas: a gray highlight flashes on every button, long-press
+ * triggers the copy/selection callout, dragging a finger selects text and
+ * fires the iOS magnifier, and any swipe on the canvas rubber-bands the
+ * whole page. The result is that the boundary between the game canvas
+ * and the React chrome feels "webby." These rules close that gap.
+ *
+ * Scoped globally because every gated page benefits — not just games.
+ * -------------------------------------------------------------------------- */
+html,
+body {
+  /* Kills the gray/black tap-highlight flash on iOS Safari. */
+  -webkit-tap-highlight-color: transparent;
+  /* Disables the long-press copy/save callout menu — kids who hold down
+   * a button long enough to "re-tap" don't get a system menu instead. */
+  -webkit-touch-callout: none;
+  /* Prevents the canvas swipe from rubber-banding the whole page. */
+  overscroll-behavior: none;
+  /* `manipulation` removes the ~300 ms tap-delay iOS adds for double-tap
+   * zoom, without blocking vertical scroll on pages that need it (map,
+   * tickets, parent dashboard). */
+  touch-action: manipulation;
+}
+
+/* UI chrome shouldn't be selectable. Kids drag-tapping rapidly will
+ * otherwise highlight headings / button text and trigger the iOS
+ * magnifier, which reads as "the app glitched." Content elements
+ * (<p>, <span>, <div>, transcripts, ship-notes) stay selectable so
+ * parents can still quote a kid's feedback. */
+button,
+a[href],
+nav,
+header,
+footer,
+label,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Opt-in escape hatch: add `.select-text` to any element that should
+ * remain selectable even if one of the rules above would block it
+ * (e.g. a heading that contains a copyable code snippet). */
+.select-text,
+.select-text * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---- Map cloud animations ----------------------------------------
+ * Three clouds at different speeds + offsets for a parallax-like
+ * feel. Pure CSS, no JS, no reflows — just translateX on SVG groups.
+ * Each cloud drifts slowly right then resets, staggered so they
+ * don't all move in lockstep.
+ * ------------------------------------------------------------------ */
+@keyframes cloud-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(60px); }
+}
+
+.animate-cloud-1 {
+  animation: cloud-drift 20s ease-in-out infinite alternate;
+}
+.animate-cloud-2 {
+  animation: cloud-drift 28s ease-in-out infinite alternate-reverse;
+}
+.animate-cloud-3 {
+  animation: cloud-drift 24s ease-in-out infinite alternate;
+  animation-delay: -8s;
+}
+
+/* Cakey's follow speech-bubble pop-in.
+ * The -0.5rem lift that used to be a static `-translate-y-2` on the card is
+ * baked into the keyframe so the CSS animation transform doesn't clobber it.
+ * The whole bubble is `pointer-events-none` and only its inner card animates
+ * (scale + opacity), so the rAF follow-loop — which drives left/top/opacity on
+ * the WRAPPER — is never touched and there's no layout jank.
+ * ------------------------------------------------------------------ */
+@keyframes cakey-pop {
+  0%   { opacity: 0; transform: translateY(-0.5rem) scale(0.82); }
+  60%  { opacity: 1; transform: translateY(-0.5rem) scale(1.04); }
+  100% { opacity: 1; transform: translateY(-0.5rem) scale(1); }
+}
+.animate-cakey-pop {
+  transform-origin: bottom left; /* grow up out of the tail toward Cakey */
+  animation: cakey-pop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-cakey-pop {
+    animation: none;
+    transform: translateY(-0.5rem); /* keep the lift, drop the motion */
+  }
+}
+
+/* ---- Login shore ----------------------------------------------------
+ * The scene behind /login (components/login/LoginShore.tsx): the sea
+ * rolling onto Sprinkle Shore, the tide breathing in and out over the wet
+ * sand, a ferry crossing the horizon, and Cakey wandering the beach. Pure
+ * CSS: every layer is a repeating SVG wave moved with transform, so it
+ * costs no JavaScript and no layout. Nothing here is interactive — the
+ * whole scene is behind the form at -z-10 and aria-hidden.
+ *
+ * Each wave layer is twice the viewport wide and slides one tile (200px)
+ * per loop, so the join is invisible. Three layers at three speeds give
+ * the parallax; the foam layer also rides up and down the sand (the tide).
+ *
+ * Light is a bright afternoon; dark is dusk. Both are tokens on .shore so
+ * the scene swaps with the page's own prefers-color-scheme.
+ * ------------------------------------------------------------------ */
+.shore {
+  --sky-1: #e0f2fe;   /* sky-100  */
+  --sky-2: #fff7ed;   /* orange-50, where the sky meets the cream page */
+  --sun: #fde68a;
+  --sun-glow: rgba(253, 224, 138, 0.35);
+  --sea-far: #7dd3fc; /* sky-300 */
+  --sea-mid: #38bdf8; /* sky-400 */
+  --sea-near: #0ea5e9;/* sky-500 */
+  --foam: #ffffff;
+  --sand-wet: #e3c9a0;
+  --sand: #fde9c4;
+  --sand-deep: #f6d9a8;
+  --cloud: #ffffff;
+  --cloud-alpha: 0.9;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 58%);
+}
+@media (prefers-color-scheme: dark) {
+  .shore {
+    --sky-1: #1e1b4b;
+    --sky-2: #3b1d3f;
+    --sun: #e0e7ff;
+    --sun-glow: rgba(199, 210, 254, 0.3);
+    --sea-far: #1e3a8a;
+    --sea-mid: #1d4ed8;
+    --sea-near: #1e40af;
+    --foam: #c7d2fe;
+    --sand-wet: #6b5a4a;
+    --sand: #8a7558;
+    --sand-deep: #6f5c43;
+    --cloud: #6366f1;
+    --cloud-alpha: 0.35;
+  }
+}
+
+/* Sun, low over the water. */
+.shore-sun {
+  position: absolute;
+  left: 72%;
+  top: 22%;
+  width: 11vmin;
+  height: 11vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff7d6, var(--sun) 60%, rgba(253, 230, 138, 0) 72%);
+  box-shadow: 0 0 60px 20px var(--sun-glow);
+}
+
+/* Clouds: two soft blobs, each drifting on the existing cloud keyframes. */
+.shore-cloud {
+  position: absolute;
+  height: 5vmin;
+  width: 16vmin;
+  border-radius: 9999px;
+  background: var(--cloud);
+  opacity: var(--cloud-alpha);
+  filter: blur(0.5px);
+}
+.shore-cloud::before,
+.shore-cloud::after {
+  content: '';
+  position: absolute;
+  bottom: 30%;
+  border-radius: 50%;
+  background: inherit;
+}
+.shore-cloud::before { left: 18%; width: 45%; height: 150%; }
+.shore-cloud::after  { left: 48%; width: 38%; height: 120%; }
+.shore-cloud-1 { left: 8%;  top: 14%; animation: cloud-drift 38s ease-in-out infinite alternate; }
+.shore-cloud-2 { left: 48%; top: 8%;  transform: scale(0.7); animation: cloud-drift 52s ease-in-out infinite alternate-reverse; }
+
+/* The sea: three wave layers, far to near. */
+.shore-sea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56%;
+  bottom: 0;
+}
+.shore-wave {
+  position: absolute;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background-repeat: repeat-x, no-repeat;
+  background-size: 200px 40px, 100% 100%;
+  background-position: 0 0, 0 39px;
+  will-change: transform;
+}
+/* Wave tiles: the same curve in each layer's colour. Keep the path identical
+ * so the layers read as one body of water moving at three speeds. */
+.shore-wave-far {
+  top: 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22 Q25 6 50 22 T100 22 T150 22 T200 22 V40 H0 Z' fill='%237dd3fc'/%3E%3C/svg%3E"),
+    linear-gradient(var(--sea-far), var(--sea-far));
+  animation: shore-slide 14s linear infinite;
+}
+.shore-wave-mid {
+  top: 9%;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 20 Q25 2 50 20 T100 20 T150 20 T200 20 V40 H0 Z' fill='%2338bdf8'/%3E%3C/svg%3E"),
+    linear-gradient(var(--sea-mid), var(--sea-mid));
+  animation: shore-slide 9s linear infinite reverse;
+}
+.shore-wave-near {
+  top: 20%;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 18 Q25 0 50 18 T100 18 T150 18 T200 18 V40 H0 Z' fill='%230ea5e9'/%3E%3C/svg%3E"),
+    linear-gradient(var(--sea-near), var(--sea-near));
+  animation: shore-slide 6s linear infinite;
+}
+@media (prefers-color-scheme: dark) {
+  /* The SVG tiles carry daylight fills; at dusk the solid body shows through
+   * a dimmed tile instead of three new data URIs. */
+  .shore-wave { filter: brightness(0.45) saturate(0.8); }
+}
+@keyframes shore-slide {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-200px, 0, 0); }
+}
+/* Glints: a few bright specks sliding over the far water. */
+.shore-glint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4%;
+  height: 10%;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0 1.5px, transparent 2px);
+  background-size: 90px 24px;
+  opacity: 0.6;
+  animation: shore-glint 5s ease-in-out infinite;
+}
+@keyframes shore-glint {
+  0%, 100% { opacity: 0.25; background-position: 0 0; }
+  50%      { opacity: 0.7;  background-position: 45px 6px; }
+}
+
+/* The beach. Sand from the shoreline down, with sprinkles pressed into it;
+ * the wet band and the foam edge breathe in and out together (the tide). */
+.shore-sand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 78%;
+  bottom: 0;
+  background:
+    radial-gradient(circle, #fb7185 0 1.5px, transparent 2px) 12px 30px / 140px 90px,
+    radial-gradient(circle, #34d399 0 1.5px, transparent 2px) 70px 70px / 160px 110px,
+    radial-gradient(circle, #fbbf24 0 1.5px, transparent 2px) 40px 110px / 120px 100px,
+    linear-gradient(180deg, var(--sand) 0%, var(--sand-deep) 100%);
+}
+.shore-wet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6%;
+  height: 22%;
+  background: linear-gradient(180deg, var(--sand-wet) 0%, rgba(227, 201, 160, 0) 100%);
+  animation: shore-tide 7s ease-in-out infinite;
+}
+.shore-foam {
+  position: absolute;
+  left: 0;
+  width: 200%;
+  top: -12%;
+  height: 16%;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 16 Q25 0 50 16 T100 16 T150 16 T200 16 V40 H0 Z' fill='%23ffffff'/%3E%3C/svg%3E"),
+    linear-gradient(var(--foam), var(--foam));
+  background-repeat: repeat-x, no-repeat;
+  background-size: 200px 40px, 100% 100%;
+  background-position: 0 0, 0 39px;
+  opacity: 0.95;
+  mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+  animation: shore-foam 7s ease-in-out infinite;
+}
+@keyframes shore-tide {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(12%); }
+}
+@keyframes shore-foam {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.95; }
+  50%      { transform: translate3d(-100px, 14%, 0); opacity: 0.75; }
+}
+
+/* The ferry, far out, crossing from right to left and bobbing on the swell. */
+.shore-ferry {
+  position: absolute;
+  top: 54%;
+  left: 100%;
+  width: 9vmin;
+  min-width: 48px;
+  animation: shore-ferry 75s linear infinite;
+}
+.shore-ferry svg { display: block; width: 100%; height: auto; animation: shore-bob 2.8s ease-in-out infinite; }
+@keyframes shore-ferry {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-100vw - 100%)); }
+}
+@keyframes shore-bob {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50%      { transform: translateY(-3px) rotate(1.5deg); }
+}
+
+/* Cakey on the beach. The outer element walks (translateX in viewport
+ * widths, flipping to face the way he goes); the inner one hops each step.
+ * The walk is one 48s loop with two pauses, so he reads as wandering rather
+ * than pacing. */
+.shore-cakey {
+  position: absolute;
+  bottom: 4%;
+  left: 0;
+  width: 18vmin;
+  min-width: 72px;
+  max-width: 128px;
+  animation: shore-wander 48s linear infinite;
+  will-change: transform;
+}
+.shore-cakey-step {
+  animation: shore-step 0.55s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+.shore-cakey svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 6px 4px rgba(92, 47, 20, 0.25)); }
+@keyframes shore-wander {
+  0%     { transform: translateX(34vw) scaleX(1); }
+  28%    { transform: translateX(70vw) scaleX(1); }
+  28.5%  { transform: translateX(70vw) scaleX(-1); }
+  36%    { transform: translateX(70vw) scaleX(-1); }   /* looks back at the sea */
+  64%    { transform: translateX(12vw) scaleX(-1); }
+  64.5%  { transform: translateX(12vw) scaleX(1); }
+  74%    { transform: translateX(12vw) scaleX(1); }    /* a pause by the dunes */
+  100%   { transform: translateX(34vw) scaleX(1); }
+}
+@keyframes shore-step {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-7px) rotate(-2deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The scene stays, the sea just holds still: the tide sits at mid, the
+   * ferry is parked out past the sun, and Cakey stands on the sand. The
+   * mascot's own file already stops his bob. */
+  .shore-wave, .shore-glint, .shore-wet, .shore-foam, .shore-ferry, .shore-ferry svg,
+  .shore-cakey, .shore-cakey-step, .shore-cloud { animation: none; }
+  .shore-ferry { left: 20%; }
+  .shore-cakey { transform: translateX(34vw); }
+}
+
+/* ---- All Games bakery: the showroom and the shelves ------------------
+ * The showroom (components/games/Showroom.tsx) is a kart-select stage: one
+ * recipe book front and centre on a turntable, the neighbours angled in at
+ * the sides, the rest waiting out of sight. It is a frosted cake stand in
+ * the bakery's own rose and cream, with fixed colours like the bakery wall
+ * around it. Positions are driven by
+ * `data-pos` on each slot: 0 front, ±1 sides, ±2 queued, x off-stage. The
+ * spin is a spring (overshoot ease) so a book LANDS rather than slides.
+ * The shelves (page.tsx) are oak: bevelled top, grained face, a bracket
+ * under each book, and an occlusion shadow where plank meets wall.
+ * ------------------------------------------------------------------ */
+.showroom {
+  background: radial-gradient(120% 90% at 50% 0%, #fffbeb 0%, #fff1f2 50%, #ffe4e6 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 0 rgba(251, 113, 133, 0.25),
+    0 18px 28px -14px rgba(251, 113, 133, 0.55),
+    0 0 0 6px #fff,
+    0 0 0 7px #fecdd3;
+}
+.showroom-case-top {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 14px;
+  z-index: 3;
+  opacity: 0.9;
+  background: repeating-linear-gradient(90deg, #fb7185 0 22px, #fff 22px 44px);
+}
+.showroom-case-top::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 10px;
+  background: linear-gradient(180deg, rgba(225, 29, 72, 0.14), transparent);
+}
+.showroom-spot {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 70%;
+  height: 100%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(60% 55% at 50% 0%, rgba(253, 230, 138, 0.45) 0%, rgba(253, 230, 138, 0.12) 45%, transparent 70%);
+}
+.showroom-stage {
+  height: 380px;
+  perspective: 1100px;
+  perspective-origin: 50% 40%;
+  touch-action: pan-y;
+}
+@media (min-width: 640px) {
+  .showroom-stage { height: 420px; }
+}
+.showroom-turntable {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  width: 62%;
+  max-width: 560px;
+  aspect-ratio: 3.6 / 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 40%, #ffffff 0%, #fff1f2 60%, #fecdd3 100%);
+  box-shadow:
+    inset 0 3px 0 #ffffff,
+    inset 0 -6px 10px rgba(251, 113, 133, 0.35),
+    0 14px 18px -6px rgba(251, 113, 133, 0.6),
+    0 0 0 3px #ffffff,
+    0 0 0 6px #fb7185;
+}
+.showroom-turntable::before {
+  content: '';
+  position: absolute;
+  inset: 10% 8%;
+  border-radius: 50%;
+  border: 2px solid rgba(251, 113, 133, 0.25);
+}
+.showroom-turntable::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(#fff, #fb7185);
+  box-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
+}
+.showroom-track {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.showroom-slot {
+  position: absolute;
+  left: 50%;
+  bottom: 112px;
+  width: 15rem;            /* RecipeBook lg: w-60 ... */
+  margin-left: -7.5rem;
+  transform-style: preserve-3d;
+  transition:
+    transform 620ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 420ms ease,
+    filter 420ms ease;
+  will-change: transform;
+}
+@media (min-width: 640px) {
+  .showroom-slot {
+    bottom: 118px;
+    width: 18rem;          /* ... sm:w-72 */
+    margin-left: -9rem;
+  }
+}
+.showroom-slot[data-pos='0']  { transform: translate3d(0, 0, 80px) rotateY(0deg); opacity: 1; filter: none; z-index: 3; }
+.showroom-slot[data-pos='-1'] { transform: translate3d(-150px, 18px, -180px) rotateY(36deg) scale(0.72); opacity: 0.8; filter: saturate(0.85); z-index: 2; }
+.showroom-slot[data-pos='1']  { transform: translate3d(150px, 18px, -180px) rotateY(-36deg) scale(0.72); opacity: 0.8; filter: saturate(0.85); z-index: 2; }
+.showroom-slot[data-pos='-2'] { transform: translate3d(-420px, 40px, -360px) rotateY(50deg) scale(0.6); opacity: 0; z-index: 1; pointer-events: none; }
+.showroom-slot[data-pos='2']  { transform: translate3d(420px, 40px, -360px) rotateY(-50deg) scale(0.6); opacity: 0; z-index: 1; pointer-events: none; }
+.showroom-slot[data-pos='x']  { transform: translate3d(0, 0, -600px) scale(0.3); opacity: 0; pointer-events: none; }
+@media (min-width: 640px) {
+  .showroom-slot[data-pos='-1'] { transform: translate3d(-230px, 22px, -160px) rotateY(34deg) scale(0.82); }
+  .showroom-slot[data-pos='1']  { transform: translate3d(230px, 22px, -160px) rotateY(-34deg) scale(0.82); }
+}
+/* Side books are RecipeBook links under an overlay button; the link itself
+ * must not take hover or clicks while it is only a prop on the stage. */
+.showroom-slot:not([data-pos='0']) a { pointer-events: none; }
+.showroom-book { position: relative; transform-style: preserve-3d; }
+.showroom-slot[data-pos='0'] .showroom-book {
+  animation: showroom-idle 6s ease-in-out infinite;
+}
+.showroom-slot[data-pos='0'].is-landing .showroom-book {
+  animation:
+    showroom-land 620ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    showroom-idle 6s ease-in-out 620ms infinite;
+}
+@keyframes showroom-idle {
+  0%, 100% { transform: rotateY(-7deg) translateY(0); }
+  50%      { transform: rotateY(7deg) translateY(-6px); }
+}
+@keyframes showroom-land {
+  0%   { transform: scale(1.06, 0.92); }
+  45%  { transform: scale(0.97, 1.04); }
+  100% { transform: scale(1); }
+}
+.showroom-reflect {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 55%;
+  margin-top: 8px;
+  transform: scaleY(-1);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.2;
+  -webkit-mask-image: linear-gradient(180deg, transparent 10%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 10%, #000 100%);
+}
+.showroom-reflect a { box-shadow: none; filter: blur(1px); }
+.showroom-arrow {
+  position: absolute;
+  top: 40%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  font-size: 24px;
+  font-weight: 700;
+  transition: transform 100ms, box-shadow 100ms, filter 100ms;
+}
+.showroom-arrow:active { transform: scale(0.95); }
+@media (min-width: 640px) {
+  .showroom-arrow { top: 44%; width: 64px; height: 64px; font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Books still change places; they cut instead of spring, and the featured
+   * one holds still instead of swaying. */
+  .showroom-slot { transition: opacity 200ms ease; }
+  .showroom-slot[data-pos='0'] .showroom-book,
+  .showroom-slot[data-pos='0'].is-landing .showroom-book { animation: none; }
+}
+
+/* Oak shelving. One plank per book cell; cells abut so the planks join into
+ * a board per row at every column count. */
+.shelf-plank {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 22px;
+  z-index: 2;
+  border-radius: 3px;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0 11px, rgba(60, 28, 10, 0.18) 11px 13px, rgba(0, 0, 0, 0) 13px 29px, rgba(255, 220, 180, 0.12) 29px 31px),
+    linear-gradient(180deg, #d9a066 0 5px, #b97b47 5px 11px, #8a4f27 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.7),
+    inset 0 -2px 0 #5c2f14,
+    0 10px 14px -6px rgba(92, 47, 20, 0.55),
+    0 22px 26px -16px rgba(92, 47, 20, 0.45);
+}
+.shelf-plank::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 6px;
+  background: linear-gradient(180deg, rgba(60, 28, 10, 0.35), transparent);
+}
+.shelf-bracket {
+  position: absolute;
+  bottom: -14px;
+  left: 20px;
+  width: 22px;
+  height: 16px;
+  z-index: 1;
+  background: linear-gradient(180deg, #7c3f1d, #4a2412);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 4px 3px rgba(60, 28, 10, 0.4));
+}
+/* Ambient occlusion on the wall just above the plank. */
+.shelf-wall-shade {
+  position: absolute;
+  inset: auto 0 22px 0;
+  height: 70px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(92, 47, 20, 0.1) 55%, rgba(92, 47, 20, 0.28) 100%);
+}
+/* Contact shadow where the book meets the wood. */
+.shelf-contact {
+  position: absolute;
+  left: 14%;
+  right: 8%;
+  bottom: 16px;
+  height: 14px;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(60, 28, 10, 0.55) 0%, rgba(60, 28, 10, 0.25) 45%, transparent 72%);
+  filter: blur(2px);
+}
